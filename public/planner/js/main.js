@@ -12,57 +12,138 @@ $().ready(function () {
     /* Collection for human-readable sprite names */
     var spriteNames = getSpriteNames();
 
-    var planId = window.location.pathname.match(/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/)
-    if (planId && planId.length && planId.length === 1) {
-        $.get('/api/'+ planId, function (data) {
+    var planId = window.location.pathname.match(/\/planner\/(.*)\//);
+    if (planId && planId.length && planId.length === 2) {
+        $.get('/api/'+ planId[1], function (data) {
             board.importData(data, function () {
                 loadData(data);
             });
+        }).fail(function () {
+            $('.editor-loader').hide();
         });
     } else {
        $('.editor-loader').hide();
     }
 
-    // show new version notification
-    if (checkLocal() && !localStorage.getItem('stardew:versionNotification')) {
-        $('.version-notification').show();
-        $('.count-report-notification').css('top', $('.version-notification').height() + 20);
+    // notification
+    if (checkLocal() && !localStorage.getItem('stardew:facebookNotification')) {
+        $('.facebook-notification').show();
+        $('.count-report-notification').css('top', $('.facebook-notification').height() + 20);
     }
 
-    $('.hide-version-notification').click(function (e) {
-        localStorage.setItem('stardew:versionNotification', true);
-        $('.version-notification').hide();
+    $('.hide-facebook-notification').click(function (e) {
+        localStorage.setItem('stardew:facebookNotification', true);
+        $('.facebook-notification').hide();
         $('.count-report-notification').css('top', 10);
     });
 
+    $('.hide-render-notification').click(function (e) {
+        $('.render-notification').hide();
+    });
+
+    $('.hide-google-notification').click(function (e) {
+        $('.google-notification').hide();
+    });
+
+    $('.switch-layout').click(function () {
+        var layout = layouts[$(this).data('layout')];
+        loadLayout(layout);
+    });
+
+    function loadLayout (layout) {
+        var oldData = board.exportData();
+        showLayoutAlert(layout);
+
+        // clear snapSVG
+        board.R.clear();
+
+        // delete canvas
+        $('#editor').html('');
+
+        // init new board with right sizes
+        board = new Board('#editor', layout.width, layout.height);
+        $('#editor,.editor').css({
+            width: layout.width < 1280 ? 1280 : layout.width,
+            height: layout.height < 1040 ? 1040 : layout.height
+        });
+
+        board.loadLayout(layout);
+
+        if (oldData) {
+            board.importData(oldData);
+        }
+    }
+
+    function showLayoutAlert(layout) {
+        $('.custom-layout-notification').hide();
+        if (!layout.official) {
+            $('.custom-layout-notification').show();
+            $('.layout-author').html(layout.author);
+            $('.layout-name').html((layout.prettyName || layout.name));
+            $('.layout-url').attr('href', layout.url);
+        }
+    }
+
+
     /* Saves your epic work */
-    $('#save').click(function (e) {
+    $('#save,.render-farm').click(function (e) {
+
+        var season = $(this).data('season');
+
         e.preventDefault();
 
         var exportData = board.exportData();
 
+        $('.save-loader').show();
         // also add options and highlight states to the save
         exportData.options = {
+            season: season,
+            layout: (board.layout.name || 'regular'),
             highlights: {
                 scarecrow: $('.highlight-scarecrow').hasClass('active'),
                 sprinkler: $('.highlight-sprinkler').hasClass('active'),
-                bee: $('.highlight-bee').hasClass('active')
+                bee: $('.highlight-bee').hasClass('active'),
+                junimo: $('.highlight-junimo-hut').hasClass('actives')
             },
             greenhouse: $('.greenhouse-switch').hasClass('active'),
             coordinates: $('.coordinates').hasClass('active'),
             hidestuff: $('.hide-stuff').hasClass('active'),
-            overwriting: $('.brush-overwrite').hasClass('active')
+            overwriting: $('.brush-overwrite').hasClass('active'),
+            objectCount: $('.count-switch').hasClass('active')
         };
 
 
         $.ajax({
-            url: '/api/save',
+            url: '/api/'+ (season ? 'render' : 'save'),
             data: JSON.stringify(exportData),
             method: 'POST',
             contentType: 'application/json'
         }).always(function (data) {
-            if (data.id) {
-                window.location.href = '/planner/' + data.id;
+            $('.save-loader').hide();
+
+            if (season) {
+                if (data.status === 'success') {
+                    // in case popup is blocked, open notification
+                    $('.render-notification').show();
+                    $('.render-url').attr('href', data.url);
+                    $('.render-display-url').html(data.url);
+
+                    // this was render
+                    window.open(data.url);
+
+                } else {
+                    if (data.status == 429) {
+                        return alert('Upload.farm is currently rate limited. Please try again in few minutes')
+                    }
+
+                    alert('Upload.farm rendering failed. Please try again in few minutes. If the problem persists, please contact us.');
+
+                }
+
+            } else {
+                if (data.id) {
+                    window.location.href = '/planner/' + data.id;
+                }
             }
         });
     });
@@ -169,8 +250,16 @@ $().ready(function () {
     });
 
 
+    $('.restriction-check').click(function (e) {
+        toggleMenuItem(e, '.restriction-check', function () { board.restrictionCheck = true; }, function () { board.restrictionCheck = false; });
+    });
+
     $('.hide-stuff').click(function (e) {
         toggleMenuItem(e, '.hide-stuff', board.showStuff.bind(board), board.hideStuff.bind(board));
+    });
+
+    $('.greenhouse-switch').click(function (e) {
+        toggleMenuItem(e, '.greenhouse-switch', board.toggleGreenhouse.bind(board), board.toggleGreenhouse.bind(board));
     });
 
     $('.coordinates').click(function (e) {
@@ -194,17 +283,6 @@ $().ready(function () {
             board.brush.freemode = true;
         }, function () {
             board.brush.freemode = false;
-        });
-    });
-
-
-
-    /* Shows greenhouse repaired */
-    $('.greenhouse-switch').click(function (e) {
-        toggleMenuItem(e, '.greenhouse-switch', function () {
-            board.background.attr('href', Board.toFullPath('img/full_background_gh_finished.jpg'));
-        }, function () {
-            board.background.attr('href', Board.toFullPath('img/full_background.jpg'));
         });
     });
 
@@ -235,10 +313,28 @@ $().ready(function () {
         var formData = new FormData();
         formData.append('file', $(this)[0].files[0]);
 
+        $('.upload-loader').show();
+        $('.upload-progress').html(0);
+
         $.ajax({
             url: '/api/import',
             type: 'POST',
             data: formData,
+            // http://stackoverflow.com/questions/20095002/how-to-show-progress-bar-while-loading-using-ajax
+            xhr: function() {
+                var xhr = new window.XMLHttpRequest();
+
+                // Upload progress
+                xhr.upload.addEventListener("progress", function(evt){
+                    if (evt.lengthComputable) {
+                        var percentComplete = evt.loaded / evt.total * 100;
+
+                        $('.upload-progress').html(Math.round(percentComplete));
+                    }
+                }, false);
+
+                return xhr;
+            },
             success: function (data) {
                 if (data.id) {
                     window.location.href = '/planner/' + data.id;
@@ -247,6 +343,8 @@ $().ready(function () {
             cache: false,
             contentType: false,
             processData: false
+        }).always(function () {
+            $('.upload-loader').hide();
         });
     });
 
@@ -322,23 +420,29 @@ $().ready(function () {
         // handle switches if new save
         if (data.options) {
             // highglihts
-            toggleMenuItem(null, '.highlight-scarecrow', board.showHighlights.bind(board, 'scarecrow'), board.hideHighlights.bind(board, 'scarecrow'), data.options.highlights.scarecrow);
-            toggleMenuItem(null, '.highlight-sprinkler', board.showHighlights.bind(board, 'sprinkler'), board.hideHighlights.bind(board, 'sprinkler'), data.options.highlights.sprinkler);
-            toggleMenuItem(null, '.highlight-bee', board.showHighlights.bind(board, 'hive'), board.hideHighlights.bind(board, 'hive'), data.options.highlights.bee);
+            if (data.options.highlights) {
+                toggleMenuItem(null, '.highlight-scarecrow', board.showHighlights.bind(board, 'scarecrow'), board.hideHighlights.bind(board, 'scarecrow'), data.options.highlights.scarecrow);
+                toggleMenuItem(null, '.highlight-sprinkler', board.showHighlights.bind(board, 'sprinkler'), board.hideHighlights.bind(board, 'sprinkler'), data.options.highlights.sprinkler);
+                toggleMenuItem(null, '.highlight-bee', board.showHighlights.bind(board, 'hive'), board.hideHighlights.bind(board, 'hive'), data.options.highlights.bee);
+                toggleMenuItem(null, '.highlight-junimo-hut', board.showHighlights.bind(board, 'hut'), board.hideHighlights.bind(board, 'hut'), data.options.highlights.junimo);
+            }
 
             // other options
             toggleMenuItem(null, '.hide-stuff', board.showStuff.bind(board), board.hideStuff.bind(board), data.options.hidestuff);
+            toggleMenuItem(null, '.count-switch', function () { $('.count-report-notification').show(); }, function () { $('.count-report-notification').hide(); }, data.options.objectCount);
             toggleMenuItem(null, '.coordinates', board.showCoords.bind(board), board.hideCoords.bind(board), data.options.coordinates);
             toggleMenuItem(null, '.brush-overwrite', function () {
                 board.brush.overwriting = true;
             }, function () {
                 board.brush.overwriting = false;
             }, data.options.overwriting);
-            toggleMenuItem(null, '.greenhouse-switch', function () {
-                board.background.attr('href', Board.toFullPath('img/full_background_gh_finished.jpg'));
-            }, function () {
-                board.background.attr('href', Board.toFullPath('img/full_background.jpg'));
-            }, data.options.greenhouse);
+
+            var layout = layouts[data.options.layout || 'regular'];
+            showLayoutAlert(layout);
+            loadLayout(layout);
+
+            // greenhouse is loaded with the layout
+            toggleMenuItem(null, '.greenhouse-switch', board.toggleGreenhouse.bind(board, 'greenhouse-fixed'), board.toggleGreenhouse.bind(board, 'greenhouse'), data.options.greenhouse);
         }
 
 

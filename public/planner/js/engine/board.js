@@ -22,34 +22,24 @@ function Board (containerId, width, height) {
     this.tiles = [];
     this.buildings = [];
     this.grid = null;
-    this.background = this.R.image(Board.toFullPath('img/full_background.jpg'), 0, 0, width, height);
+    this.layout = null;
+    this.background = null;
     this.brush = new Brush(this);
     this.keepHighlights = [];
     this.placingBuilding = null;
-
+    this.restrictedPath = null;
     this.restrictionCheck = true;
+    this.house = null;
+    this.greenhouse = null;
 
-    this.restrictedPath = [
-        'M0,0L640,0L640,128L560,128L560,96L544,96L544,128L64,128L64,144L48,144L48,368L112,368L112,544L80,544L80,560L64,560L64,576L48,576L48,992L640,992L640,1040L0,1040z', // left side
-        'M672,0L672,128L736,128L736,112L768,112L768,128L784,128L784,112L848,112L848,144L880,144L880,160L1200,160L1200,176L1232,176L1232,160L1248,160L1248,176L1232,176L1232,192L1248,192L1248,240L1280,240L1280,0z', // top right
-        'M1232,304L1232,896L1168,896L1168,944L1104,944L1104,992L672,992L672,1040L1280,1040L1280,304z', // bottom right
-        'M400,160L512,160L512,256L400,256z', // greenhouse
-        'M944,176L1088,176L1088,256L1104,256L1104,272L944,272z', // house
-        'M1136,224L1168,224L1168,240L1136,240z', // ship box
-        'M1120,448L1200,448L1200,464L1216,464L1216,528L1200,528L1200,544L1136,544L1136,528L1120,528L1120,448z', // little pond
-        'M576,784L688,784L688,800L704,800L704,816L736,816L736,832L752,832L752,896L736,896L736,912L720,912L720,928L672,928L672,944L592,944L592,928L576,928L576,912L544,912L544,880L528,880L528,832L544,832L544,816L560,816L560,800L576,800L576,784z' // big pond
-    ].join('');
-
-    // TODO: actually use correct path
-    this.restrictedBuildingArea = this.R.path(this.restrictedPath);
-    this.restrictedBuildingArea.attr({
-        fill: 'none',
-        stroke: 'red'
-    });
+    // load regular layout by default
+    this.loadLayout(layouts.regular);
 
     this.positionHelpers = [this.R.text(0, 30, 'X: 0').attr({fill: 'white', pointerEvents: 'none', opacity: 0}), this.R.text(0, 15, 'Y: 0').attr({fill: 'white', pointerEvents: 'none', opacity: 0})];
+
     this.ghostPath = null; // used for debugging...
-    this.pathPoints = []; // used for debugging...
+    this.ghostPathPoints = []; // used for debugging...
+    this.ghosting = false;
 
     this.drawGrid();
     this.drawHelpers();
@@ -68,6 +58,72 @@ function Board (containerId, width, height) {
 
     return this;
 }
+
+Board.prototype.loadLayout = function loadLayout (layout) {
+    if (this.background) {
+        this.background.remove();
+    }
+
+    this.background = this.R.image(Board.toFullPath('img/layouts/'+ layout.backgroundImage), 0, 0, layout.width, layout.height);
+    this.background.toFront();
+
+    if (this.house) {
+        this.house.remove();
+        this.house = null;
+    }
+
+    if (this.greenhouse) {
+        this.greenhouse.remove();
+        this.greenhouse = null;
+    }
+
+    if (this.restrictedBuildingArea) {
+        this.restrictedBuildingArea.remove();
+    }
+
+    this.restrictedPath = null;
+    this.restrictionCheck = false;
+
+    // start adding stuff
+    if (layout.restrictionPath) {
+        this.restrictedPath = layout.restrictionPath;
+        this.restrictionCheck = true;
+        // TODO: actually use correct path
+        this.restrictedBuildingArea = this.R.path(this.restrictedPath);
+        this.restrictedBuildingArea.attr({
+            fill: 'none',
+            stroke: 'red'
+        });
+    }
+
+    if (layout.house) {
+        this.house = new Building(this, 'house', layout.house.x*this.tileSize, layout.house.y*this.tileSize, false, true);
+    }
+
+    if (layout.greenhouse) {
+        this.greenhouse = new Building(this, 'greenhouse', layout.greenhouse.x*this.tileSize, layout.greenhouse.y*this.tileSize, false, true);
+    }
+
+    this.layout = layout;
+};
+
+Board.prototype.toggleGreenhouse = function toggleGreenhouse(forcedState) {
+    if (!this.layout.greenhouse) {
+        return;
+    }
+
+    var currentGreenhouse = this.greenhouse.type;
+    var newState = (currentGreenhouse == 'greenhouse') ? 'greenhouse-fixed' : 'greenhouse';
+
+    this.greenhouse.remove();
+
+    if (forcedState) {
+        newState = forcedState;
+    }
+
+    this.greenhouse = new Building(this, newState, this.layout.greenhouse.x*this.tileSize, this.layout.greenhouse.y*this.tileSize, false, true);
+};
+
 
 Board.prototype.showHighlights = function showHighlights(type) {
     var board = this;
@@ -236,7 +292,7 @@ Board.prototype.dragEnd = function dragEnd(e) {
     this.brush.unlock();
 
     // check if rect happens to be inside of restricted area
-    if ($(e.target).data('custom-type') !== 'building' && (!this.brush.type || !this.checkRestriction(this.restrictedBuildingArea, this.brush.rect))) {
+    if (!this.restrictionCheck || ($(e.target).data('custom-type') !== 'building' && (!this.brush.type || !this.checkRestriction(this.restrictedBuildingArea, this.brush.rect)))) {
         this.drawTiles(this.brush.rect, this.brush.type);
     }
 
@@ -250,6 +306,26 @@ Board.prototype.dragEnd = function dragEnd(e) {
  */
 Board.prototype.mousedown = function mousedown(e) {
     var board = this;
+    var pos = Board.normalizePos(e, null, board.tileSize);
+
+    if (board.ghosting) {
+
+        board.ghostPathPoints.push('L'+ pos.x +','+ pos.y);
+
+        if (board.ghostPath) {
+            board.ghostPath.remove();
+        }
+
+        var tempPath = 'M'+ board.ghostPathPoints.join('').substring(1);
+
+        board.ghostPath = board.R.path(tempPath);
+
+        board.ghostPath.attr({
+            fill: 'none',
+            stroke: 'blue',
+            strokeWidth: 3
+        });
+    }
 
     if (board.placingBuilding) {
 
@@ -258,12 +334,19 @@ Board.prototype.mousedown = function mousedown(e) {
             return;
         }
         var bIndex = board.buildings.map(function (b) { return (b || {}).uuid; }).indexOf((board.placingBuilding || {}).uuid);
-        var pos = Board.normalizePos(e, null, board.tileSize);
+        var tileX = pos.x/board.tileSize;
+        var tileY = pos.y/board.tileSize;
         var buildingId = board.placingBuilding.type;
 
         board.placingBuilding.move(pos);
         board.placingBuilding.putDown();
-        if (bIndex === -1) {
+
+        // if it is a torch and placed on a fence, we turn the fence into torch-{type}-fence
+        if (board.placingBuilding.type == 'torch' && (board.tiles[tileY] && board.tiles[tileY][tileX] && board.tiles[tileY][tileX].attr('tileType').indexOf('fence') !== -1)) {
+            board.drawTile(pos, 'torch-'+ board.tiles[tileY][tileX].attr('tileType'), true);
+
+            board.placingBuilding.remove();
+        } else if (bIndex === -1) {
             board.buildings.push(board.placingBuilding);
         }
 
@@ -377,12 +460,12 @@ Board.prototype.mousemove = function mousemove(e) {
     // show pos
     var snappedPos = Board.normalizePos(e, null, this.tileSize);
     this.positionHelpers[0].attr({
-        'text': 'Y: '+ (+snappedPos.y / this.tileSize),
+        'text': 'Y: '+ (+snappedPos.y / this.tileSize) +' ('+ (+snappedPos.y) +')',
         'y': snappedPos.y - 16,
         'x': snappedPos.x - 3*16
     }).toBack();
     this.positionHelpers[1].attr({
-        'text': 'X: '+ (+snappedPos.x / this.tileSize),
+        'text': 'X: '+ (+snappedPos.x / this.tileSize) +' ('+ (+snappedPos.x) +')',
         'y': snappedPos.y,
         'x': snappedPos.x - 3*16
     }).toBack();
@@ -434,6 +517,7 @@ Board.prototype.keydown = function keydown(e) {
         this.showHighlights('sprinkler');
         this.showHighlights('scarecrow');
         this.showHighlights('hive');
+        this.showHighlights('junimo');
     }
 
     // 'Esc'
@@ -468,6 +552,10 @@ Board.prototype.keyup = function keyup(e) {
 
         if (this.highlightsState.indexOf('hive') === -1) {
             this.hideHighlights('hive');
+        }
+
+        if (this.highlightsState.indexOf('junimo') === -1) {
+            this.hideHighlights('junimo');
         }
     }
 };
@@ -514,7 +602,7 @@ Board.normalizePos = function normalizePos(e, newTarget, snap) {
  */
 Board.prototype.drawTiles = function drawTiles(area, tile) {
     // first we check path restriction
-    if (this.brush.type && this.checkPathRestriction(this.restrictedBuildingArea, area)) {
+    if (this.restrictionCheck && this.brush.type && this.checkPathRestriction(this.restrictedBuildingArea, area)) {
         return;
     }
 
@@ -554,9 +642,10 @@ Board.prototype.drawTiles = function drawTiles(area, tile) {
  * Draws tile to given location, also does all the checking work
  * @param location
  * @param tile
+ * @param replace
  * @return {*}
  */
-Board.prototype.drawTile = function drawTile(location, tile) {
+Board.prototype.drawTile = function drawTile(location, tile, replace) {
     var hardX = location.x / this.tileSize;
     var hardY = location.y / this.tileSize;
 
@@ -571,7 +660,7 @@ Board.prototype.drawTile = function drawTile(location, tile) {
     if (this.tiles[hardY][hardX]) {
         // there seems to be a tile in place here already, remove it
 
-        if (!this.brush.overwriting && !this.brush.erase) {
+        if (!this.brush.overwriting && !this.brush.erase && !replace) {
             return;
         } else {
             this.tiles[hardY][hardX].remove();
@@ -808,7 +897,7 @@ Board.prototype.hideCoords = function hideCoords() {
  * @returns {string}
  */
 Board.toFullPath = function toFullPath(relativePath) {
-    return window.location.origin + window.location.pathname + relativePath;
+    return window.location.origin + '/planner/'+ relativePath;
 };
 
 /**

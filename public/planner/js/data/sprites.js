@@ -16,6 +16,11 @@ var data = {
         'stone-fence',
         'iron-fence',
         'hardwood-fence',
+        'torch-fence',
+        'torch-wood-fence',
+        'torch-stone-fence',
+        'torch-iron-fence',
+        'torch-hardwood-fence',
         'road',
         'wood-path',
         'steppingstone-path',
@@ -30,7 +35,43 @@ var data = {
         'stone',
         'twig',
         'tapper',
-        'hoedirt' // also known as farmland
+        'hoedirt', // also known as farmland
+		'blue-jazz',
+		'cauliflower',
+		'garlic',
+		'green-bean',
+		'kale',
+		'parsnip',
+		'potato',
+		'rhubarb',
+		'strawberry',
+		'tulip',
+		'summer',
+		'blueberry',
+		'hops',
+		'hot-pepper',
+		'melon',
+		'poppy',
+		'radish',
+		'red-cabbage',
+		'starfruit',
+		'summer-spangle',
+		'tomato',
+		'wheat',
+		'fall',
+		'amaranth',
+		'ancient-fruit',
+		'artichoke',
+		'beet',
+		'bok-choy',
+		'corn',
+		'cranberry',
+		'eggplant',
+		'fairy-rose',
+		'grape',
+		'pumpkin',
+		'sunflower',
+		'yam'
     ],
     buildings: {
         "well": {
@@ -238,6 +279,21 @@ var data = {
             "width": 48,
             "height": 48
         },
+        "oak-tree": {
+            "sprite": "img/tiles/oak-tree.png",
+            "width": 48,
+            "height": 48
+        },
+        "maple-tree": {
+            "sprite": "img/tiles/maple-tree.png",
+            "width": 48,
+            "height": 48
+        },
+        "pine-tree": {
+            "sprite": "img/tiles/pine-tree.png",
+            "width": 48,
+            "height": 48
+        },
         "apple": {
             "sprite": "img/tiles/apple.png",
             "width": 48,
@@ -356,6 +412,67 @@ var data = {
             "sprite": "./img/tiles/large-stump.png",
             "width": 32,
             "height": 32
+        },
+        'house': {
+            "width": 144,
+            "height": 144,
+            "sprite": "./img/tiles/house.png"
+        },
+        'greenhouse': {
+            "width": 112,
+            "height": 160,
+            "sprite": "./img/tiles/greenhouse-broken.png"
+        },
+        'greenhouse-fixed': {
+            "width": 112,
+            "height": 160,
+            "sprite": "./img/tiles/greenhouse-fixed.png"
+        },
+        'earth-obelisk': {
+            "width": 3*16,
+            "height": 3*16,
+            "sprite": "./img/tiles/earth-obelisk.png"
+        },
+        'water-obelisk': {
+            "width": 3*16,
+            "height": 3*16,
+            "sprite": "./img/tiles/water-obelisk.png"
+        },
+        'gold-clock': {
+            "width": 3*16,
+            "height": 2*16,
+            "sprite": "./img/tiles/gold-clock.png"
+        },
+        'mill': {
+            "width": 4*16,
+            "height": 2*16,
+            "sprite": "./img/tiles/mill.png"
+        },
+        'junimo-hut': {
+            "width": 3*16,
+            "height": 2*16,
+            "sprite": "./img/tiles/junimo-hut.png",
+            "highlight": {
+                "path": ["M0,0", "L272,0", "L272,272", "L0,272", "z"],
+                "width": 272,
+                "height": 256,
+                "color": "#89CFF0"
+            }
+        },
+        'shed': {
+            "width": 7*16,
+            "height": 3*16,
+            "sprite": "./img/tiles/shed.png"
+        },
+        'object-restriction': {
+            "width": 16,
+            "height": 16,
+            "sprite": "./img/tiles/object-restriction.png"
+        },
+        'building-restriction': {
+            "width": 16,
+            "height": 16,
+            "sprite": "./img/tiles/building-restriction.png"
         }
     }
 };
